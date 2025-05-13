@@ -1,3 +1,4 @@
+
 from flask import Flask, request, render_template_string
 import pandas as pd
 import numpy as np
@@ -5,12 +6,18 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, roc_curve, confusion_matrix, RocCurveDisplay
 from imblearn.over_sampling import SMOTE
+import matplotlib.pyplot as plt
+import seaborn as sns
 import os
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Ensure static directory exists for saving plots
+if not os.path.exists('static'):
+    os.makedirs('static')
 
 # ------------------- Model Training -------------------
 df = pd.read_csv("Churn2.csv")
@@ -48,6 +55,44 @@ best_model_name = "Random Forest" if rfc_acc >= dtc_acc else "Decision Tree"
 
 feature_names = X.columns.tolist()
 
+# ------------------- Visualization Generation -------------------
+# Generate ROC Curve
+y_pred_proba = best_model.predict_proba(X_test)[:, 1]
+fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+plt.figure(figsize=(6, 4))
+plt.plot(fpr, tpr, label=f'ROC Curve (AUC = {np.trapz(tpr, fpr):.2f})')
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve')
+plt.legend(loc='lower right')
+plt.grid(True)
+plt.savefig('static/roc_curve.png')
+plt.close()
+
+# Generate Feature Importance Plot
+feature_importance = best_model.feature_importances_
+sorted_idx = np.argsort(feature_importance)[::-1]
+plt.figure(figsize=(6, 4))
+plt.bar(range(len(feature_importance)), feature_importance[sorted_idx], align='center')
+plt.xticks(range(len(feature_importance)), np.array(feature_names)[sorted_idx], rotation=45, ha='right')
+plt.xlabel('Features')
+plt.ylabel('Importance')
+plt.title('Feature Importance')
+plt.tight_layout()
+plt.savefig('static/feature_importance.png')
+plt.close()
+
+# Generate Confusion Matrix
+cm = confusion_matrix(y_test, best_model.predict(X_test))
+plt.figure(figsize=(6, 4))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False)
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.title('Confusion Matrix')
+plt.savefig('static/confusion_matrix.png')
+plt.close()
+
 # ------------------- HTML Template -------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -76,7 +121,7 @@ HTML_TEMPLATE = """
             z-index: -1;
             opacity: 0.7;
         }
-        .title-bar {
+        .navbar {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(12px);
             border-radius: 12px;
@@ -87,30 +132,34 @@ HTML_TEMPLATE = """
             position: sticky;
             top: 20px;
             z-index: 1000;
-            text-align: center;
+            display: flex;
+            align-items: center;
         }
-        .title-bar h1 {
+        .navbar h1 {
             color: #ffffff;
             font-size: 1.8rem;
             font-weight: 600;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
         .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            gap: 2rem;
+        }
+        .section {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(12px);
             border-radius: 16px;
-            padding: 2.5rem;
-            width: 100%;
-            max-width: 1000px;
-            margin: 0 auto;
+            padding: 2rem;
             box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
         h2 {
             color: #ffffff;
-            font-size: 2rem;
+            font-size: 1.8rem;
             font-weight: 600;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
             text-align: center;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
@@ -169,85 +218,46 @@ HTML_TEMPLATE = """
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 2000;
-            justify-content: center;
-            align-items: center;
-        }
-        .modal.active {
-            display: flex;
-        }
-        .modal-content {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(12px);
-            border-radius: 16px;
-            padding: 2rem;
-            max-width: 500px;
-            width: 90%;
+        .output-section p {
             color: #d1fae5;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
-            animation: slideIn 0.3s ease;
-            position: relative;
+            font-size: 1.1rem;
             text-align: center;
         }
-        .modal-content p {
-            font-size: 1.1rem;
-            margin-bottom: 1.5rem;
+        .visualization-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            padding: 1rem 0;
         }
-        .close-btn {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            background: none;
-            border: none;
-            color: #e0e0e0;
-            font-size: 1.5rem;
-            cursor: pointer;
-            transition: color 0.3s ease;
+        .visualization-images {
+            display: flex;
+            flex-direction: row;
+            gap: 1.5rem;
+            overflow-x: auto;
         }
-        .close-btn:hover {
-            color: #3b82f6;
-        }
-        .modal-btn {
-            padding: 10px 20px;
-            background: linear-gradient(90deg, #3b82f6, #60a5fa);
-            color: white;
-            border: none;
+        .visualization-images img {
+            max-width: 400px;
+            width: 100%;
             border-radius: 8px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
-        .modal-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-        }
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
+        @media (max-width: 900px) {
+            .visualization-images {
+                flex-direction: column;
+                overflow-x: visible;
             }
-            to {
-                opacity: 1;
-                transform: translateY(0);
+            .visualization-images img {
+                max-width: 100%;
             }
         }
         @media (max-width: 600px) {
-            .title-bar {
+            .navbar {
                 padding: 0.8rem 1.5rem;
             }
-            .title-bar h1 {
+            .navbar h1 {
                 font-size: 1.4rem;
             }
-            .container {
+            .section {
                 padding: 1.5rem;
             }
             h2 {
@@ -256,55 +266,56 @@ HTML_TEMPLATE = """
             form {
                 grid-template-columns: 1fr;
             }
-            .modal-content {
-                padding: 1.5rem;
-            }
         }
     </style>
 </head>
 <body>
     <div id="particles-js"></div>
-    <div class="title-bar">
+    <nav class="navbar">
         <h1>Customer Churn Prediction</h1>
-    </div>
+    </nav>
     <div class="container">
-        <h2>Enter Customer Details</h2>
-        <form method="POST">
-            {% for feature in form_fields %}
-                <div class="form-group">
-                    <label>{{ feature }}:</label>
-                    {% if feature in dropdowns %}
-                        <select name="{{ feature }}">
-                            {% for option in dropdowns[feature] %}
-                                <option value="{{ option }}">{{ option }}</option>
-                            {% endfor %}
-                        </select>
-                    {% else %}
-                        <input type="text" name="{{ feature }}" required>
-                    {% endif %}
-                </div>
-            {% endfor %}
-            <input type="submit" value="Predict">
-        </form>
-    </div>
-    {% if result %}
-        <div id="predictionModal" class="modal active">
-            <div class="modal-content">
-                <button class="close-btn" onclick="closeModal()">×</button>
+        <div class="section input-section">
+            <h2>Enter Customer Details</h2>
+            <form method="POST">
+                {% for feature in form_fields %}
+                    <div class="form-group">
+                        <label>{{ feature }}:</label>
+                        {% if feature in dropdowns %}
+                            <select name="{{ feature }}">
+                                {% for option in dropdowns[feature] %}
+                                    <option value="{{ option }}">{{ option }}</option>
+                                {% endfor %}
+                            </select>
+                        {% else %}
+                            <input type="text" name="{{ feature }}" required>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+                <input type="submit" value="Predict">
+            </form>
+        </div>
+        <div class="section output-section">
+            <h2>Prediction Result</h2>
+            {% if result %}
                 <p>{{ result }}</p>
-                <button class="modal-btn" onclick="closeModal()">OK</button>
+            {% else %}
+                <p>No prediction yet. Submit the form to see the result.</p>
+            {% endif %}
+        </div>
+        <div class="section visualization-section">
+            <h2>Model Visualizations</h2>
+            <div class="visualization-images">
+                <img src="{{ url_for('static', filename='roc_curve.png') }}" alt="ROC Curve">
+                <img src="{{ url_for('static', filename='feature_importance.png') }}" alt="Feature Importance">
+                <img src="{{ url_for('static', filename='confusion_matrix.png') }}" alt="Confusion Matrix">
             </div>
         </div>
-    {% endif %}
+    </div>
 
     <!-- Scripts -->
     <script src="{{ url_for('static', filename='js/particles.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/particles-config.js') }}"></script>
-    <script>
-        function closeModal() {
-            document.getElementById('predictionModal').classList.remove('active');
-        }
-    </script>
 </body>
 </html>
 """
@@ -335,10 +346,9 @@ def predict():
             result = f"Error: {str(e)}"
 
     return render_template_string(HTML_TEMPLATE, form_fields=feature_names, result=result, dropdowns=choices)
-
 # ------------------- Main Entry -------------------
 if __name__ == '__main__':
     app.run(debug=True)
     import os
-    port = int(os.environ.get('PORT', 5000)) 
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
