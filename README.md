@@ -153,7 +153,7 @@ The application trains Random Forest and Decision Tree classifiers, selecting th
 | Web Interface (Form) | ![Form](static/form.png) |
 | Prediction Result (Churn) | ![Churn](static/churn.png) |
 | Prediction Result (No Churn) | ![No Churn](static/nochurn.png) |
-| Visualizations Section | ![Visualizations](static/visualizations.png) |
+| Visualizations Section | ![Visualizations](static/visualisations.png) |
 
 *Note*: Screenshots are placeholders; update with actual images after capturing them.
 
